@@ -5,8 +5,8 @@ const path = require('path');
 
 // ====== Cấu hình ======
 const token = process.env.BOT_TOKEN;
-const ADMIN_ID = 123456789; // ID Telegram của bạn
-const ALLOWED_TOPIC_ID = 42; // ID topic được phép hoạt động
+const ADMIN_ID = 487606557; // ID Telegram của bạn
+const ALLOWED_TOPIC_ID = 2217607; // ID topic được phép hoạt động
 const ALLOWED_DOMAIN = "https://x.com"; // Chỉ cho phép link này
 
 // ====== Khởi tạo bot ======
