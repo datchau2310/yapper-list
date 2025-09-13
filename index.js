@@ -12,6 +12,12 @@ const ALLOWED_DOMAIN = "https://x.com"; // Chỉ cho phép link này
 // ====== Khởi tạo bot ======
 const bot = new TelegramBot(token, { polling: true });
 const dataFile = path.join(__dirname, 'links.json');
+bot.deleteWebhook().then(() => {
+    console.log('✅ Webhook đã được xoá, bot sẽ dùng polling.');
+}).catch((err) => {
+    console.error('❌ Lỗi khi xoá webhook:', err.message);
+});
+
 
 // ====== Hàm đọc file ======
 function loadLinks() {
@@ -100,53 +106,30 @@ bot.onText(/^\/list$/, (msg) => {
         return bot.sendMessage(chatId, '📭 Chưa có link nào được lưu.', { message_thread_id: ALLOWED_TOPIC_ID });
     }
 
-    let message = '📌 Danh sách link đã lưu:\n\n';
-    const keyboard = [];
-
-    links.forEach((item, index) => {
-        message += `${index + 1}. ${item.content} (by ${item.user} - ${item.time})\n`;
-
-        // Nếu là admin hoặc chủ link thì mới hiện nút Xóa
-        if (msg.from.id === ADMIN_ID || item.user === (msg.from.username || msg.from.first_name)) {
-            keyboard.push([{ text: `🗑 Xóa #${index + 1}`, callback_data: `delete_${index}` }]);
-        }
+    // Gom nhóm theo người gửi
+    const grouped = {};
+    links.forEach((item) => {
+        const username = item.user || 'Không rõ';
+        if (!grouped[username]) grouped[username] = [];
+        grouped[username].push(item);
     });
 
-    const opts = {
-        reply_markup: { inline_keyboard: keyboard },
-        message_thread_id: ALLOWED_TOPIC_ID
-    };
+    let message = '📌 Danh sách link đã lưu:\n\n';
+    for (const [user, items] of Object.entries(grouped)) {
+        message += `👤 ${user}\n`;
+        items.forEach((item) => {
+            message += `• ${item.content} (${item.time})\n`;
+        });
+        message += '\n';
+    }
 
-    bot.sendMessage(chatId, message, opts);
+    bot.sendMessage(chatId, message.trim(), { message_thread_id: ALLOWED_TOPIC_ID });
 });
 
 
 // ====== Xử lý nút Reset ======
 bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
-
-    // Xóa link theo index
-    if (query.data.startsWith('delete_')) {
-        const index = parseInt(query.data.split('_')[1], 10);
-
-        if (isNaN(index) || index < 0 || index >= links.length) {
-            return bot.answerCallbackQuery(query.id, { text: '⚠️ Link không tồn tại', show_alert: true });
-        }
-
-        const link = links[index];
-
-        // Chỉ admin hoặc chủ link mới được xóa
-        if (query.from.id !== ADMIN_ID && link.user !== (query.from.username || query.from.first_name)) {
-            return bot.answerCallbackQuery(query.id, { text: '❌ Bạn không có quyền xóa link này', show_alert: true });
-        }
-
-        links.splice(index, 1);
-        saveLinks(links);
-
-        bot.answerCallbackQuery(query.id, { text: '🗑 Link đã được xóa' });
-        sendTempMessage(chatId, `🗑 Đã xóa link: ${link.content}`, { message_thread_id: ALLOWED_TOPIC_ID });
-        return;
-    }
 
     if (query.data === 'reset_data') {
         if (query.from.id !== ADMIN_ID) {
@@ -163,29 +146,50 @@ bot.on('callback_query', (query) => {
     }
 });
 
-async function updatePinnedList(chatId, userId) {
+// ====== Lệnh /remove ======
+bot.onText(/^\/remove (\d+)$/, (msg, match) => {
+    if (!isAllowedTopic(msg)) return;
+
+    const chatId = msg.chat.id;
+    const index = parseInt(match[1], 10) - 1; // chuyển số thứ tự sang index mảng
+
+    if (isNaN(index) || index < 0 || index >= links.length) {
+        return sendTempMessage(chatId, '⚠️ Số thứ tự không hợp lệ!', { message_thread_id: ALLOWED_TOPIC_ID });
+    }
+
+    const link = links[index];
+
+    // Chỉ admin hoặc chủ link mới được xóa
+    if (msg.from.id !== ADMIN_ID && link.user !== (msg.from.username || msg.from.first_name)) {
+        return sendTempMessage(chatId, '❌ Bạn không có quyền xóa link này!', { message_thread_id: ALLOWED_TOPIC_ID });
+    }
+
+    links.splice(index, 1);
+    saveLinks(links);
+
+    sendTempMessage(chatId, `🗑 Đã xóa link: ${link.content}`, { message_thread_id: ALLOWED_TOPIC_ID });
+
+    // Cập nhật lại danh sách ghim
+    updatePinnedList(chatId);
+});
+
+
+async function updatePinnedList(chatId) {
     if (links.length === 0) return;
 
     // Gom nhóm theo người gửi
     const grouped = {};
-    links.forEach((item, index) => {
+    links.forEach((item) => {
         const username = item.user || 'Không rõ';
         if (!grouped[username]) grouped[username] = [];
-        grouped[username].push({ ...item, index });
+        grouped[username].push(item);
     });
 
     let message = '📌 Danh sách link đã lưu:\n\n';
-    const keyboard = [];
-
     for (const [user, items] of Object.entries(grouped)) {
         message += `👤 ${user}\n`;
         items.forEach((item) => {
             message += `• ${item.content} (${item.time})\n`;
-
-            // Chỉ admin hoặc chủ link mới có nút xóa
-            if (userId === ADMIN_ID || item.user === (userId === ADMIN_ID ? 'admin' : (bot.getMe().username || '')) || item.user === (bot.getMe().username || '')) {
-                keyboard.push([{ text: `🗑 Xóa #${item.index + 1}`, callback_data: `delete_${item.index}` }]);
-            }
         });
         message += '\n';
     }
@@ -197,7 +201,6 @@ async function updatePinnedList(chatId, userId) {
         }
 
         const sent = await bot.sendMessage(chatId, message.trim(), {
-            reply_markup: { inline_keyboard: keyboard },
             message_thread_id: ALLOWED_TOPIC_ID
         });
 
@@ -207,6 +210,8 @@ async function updatePinnedList(chatId, userId) {
         console.error('Lỗi cập nhật pin:', err.message);
     }
 }
+
+
 
 
 // ====== Cron job reset 7h sáng ======
