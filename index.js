@@ -18,7 +18,9 @@ const dataFile = path.join(__dirname, 'links.json');
 function loadLinks() {
     try {
         if (fs.existsSync(dataFile)) {
-            return JSON.parse(fs.readFileSync(dataFile));
+            const raw = fs.readFileSync(dataFile, 'utf8');
+            if (!raw || raw.trim() === '') return [];
+            return JSON.parse(raw);
         }
         return [];
     } catch (err) {
@@ -26,6 +28,7 @@ function loadLinks() {
         return [];
     }
 }
+
 
 // ====== Hàm ghi file ======
 function saveLinks(data) {
@@ -79,6 +82,7 @@ bot.onText(/^\/link (.+)/, async (msg, match) => {
     });
 
     saveLinks(links);
+    await updatePinnedList(chatId);
 
     // Xoá tin nhắn gốc
     try {
@@ -168,6 +172,19 @@ bot.onText(/^\/remove (\d+)$/, (msg, match) => {
     updatePinnedList(chatId);
 });
 
+function loadPinnedMessageId() {
+    try {
+        if (fs.existsSync(pinFile)) {
+            const raw = fs.readFileSync(pinFile, 'utf8');
+            if (!raw || raw.trim() === '') return null;
+            return JSON.parse(raw);
+        }
+        return null;
+    } catch (err) {
+        console.error('Lỗi đọc file pin:', err);
+        return null;
+    }
+}
 
 async function updatePinnedList(chatId) {
     if (links.length === 0) return;
