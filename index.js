@@ -5,8 +5,9 @@ const path = require('path');
 
 // ====== Cấu hình ======
 const token = process.env.BOT_TOKEN;
-const ADMIN_ID = 487606557; // ID Telegram của bạn (lấy từ @userinfobot)
-const ALLOWED_TOPIC_ID = 2217607; // ID topic được phép hoạt động
+const ADMIN_ID = 123456789; // ID Telegram của bạn
+const ALLOWED_TOPIC_ID = 42; // ID topic được phép hoạt động
+const ALLOWED_DOMAIN = "https://x.com"; // Chỉ cho phép link này
 
 // ====== Khởi tạo bot ======
 const bot = new TelegramBot(token, { polling: true });
@@ -16,8 +17,7 @@ const dataFile = path.join(__dirname, 'links.json');
 function loadLinks() {
     try {
         if (fs.existsSync(dataFile)) {
-            const raw = fs.readFileSync(dataFile);
-            return JSON.parse(raw);
+            return JSON.parse(fs.readFileSync(dataFile));
         }
         return [];
     } catch (err) {
@@ -43,6 +43,14 @@ function isAllowedTopic(msg) {
     return msg.message_thread_id === ALLOWED_TOPIC_ID;
 }
 
+// ====== Hàm gửi tin nhắn tự xoá ======
+async function sendTempMessage(chatId, text, options = {}) {
+    const sent = await bot.sendMessage(chatId, text, options);
+    setTimeout(() => {
+        bot.deleteMessage(chatId, sent.message_id).catch(() => { });
+    }, 5000); // 5 giây
+}
+
 // ====== Lệnh /link ======
 bot.onText(/^\/link (.+)/, async (msg, match) => {
     if (!isAllowedTopic(msg)) return;
@@ -51,6 +59,18 @@ bot.onText(/^\/link (.+)/, async (msg, match) => {
     const messageId = msg.message_id;
     const linkContent = match[1].trim();
 
+    // Kiểm tra domain hợp lệ
+    if (!linkContent.startsWith(ALLOWED_DOMAIN)) {
+        return sendTempMessage(chatId, `❌ Chỉ chấp nhận link bắt đầu bằng: ${ALLOWED_DOMAIN}`, { message_thread_id: ALLOWED_TOPIC_ID });
+    }
+
+    // Kiểm tra trùng link
+    const isDuplicate = links.some(item => item.content === linkContent);
+    if (isDuplicate) {
+        return sendTempMessage(chatId, `⚠️ Link này đã tồn tại trong danh sách!`, { message_thread_id: ALLOWED_TOPIC_ID });
+    }
+
+    // Lưu link
     links.push({
         user: msg.from.username || msg.from.first_name,
         content: linkContent,
@@ -59,17 +79,18 @@ bot.onText(/^\/link (.+)/, async (msg, match) => {
 
     saveLinks(links);
 
+    // Xoá tin nhắn gốc
     try {
         await bot.deleteMessage(chatId, messageId);
     } catch (err) {
         console.error('Không thể xóa tin nhắn:', err.message);
     }
 
-    bot.sendMessage(chatId, `✅ Link đã được lưu!`, { message_thread_id: ALLOWED_TOPIC_ID });
+    // Gửi thông báo tự xoá
+    sendTempMessage(chatId, `✅ Link đã được lưu!`, { message_thread_id: ALLOWED_TOPIC_ID });
 });
 
 // ====== Lệnh /list ======
-// Lệnh /list
 bot.onText(/^\/list$/, (msg) => {
     if (!isAllowedTopic(msg)) return;
 
@@ -84,7 +105,6 @@ bot.onText(/^\/list$/, (msg) => {
         message += `${index + 1}. ${item.content} (by ${item.user} - ${item.time})\n`;
     });
 
-    // Nếu là admin → gửi kèm nút reset
     if (msg.from.id === ADMIN_ID) {
         const opts = {
             reply_markup: {
@@ -96,11 +116,9 @@ bot.onText(/^\/list$/, (msg) => {
         };
         bot.sendMessage(chatId, message, opts);
     } else {
-        // Người thường → chỉ gửi danh sách
         bot.sendMessage(chatId, message, { message_thread_id: ALLOWED_TOPIC_ID });
     }
 });
-
 
 // ====== Xử lý nút Reset ======
 bot.on('callback_query', (query) => {
@@ -108,13 +126,16 @@ bot.on('callback_query', (query) => {
 
     if (query.data === 'reset_data') {
         if (query.from.id !== ADMIN_ID) {
-            return bot.answerCallbackQuery(query.id, { text: '❌ Bạn không có quyền reset dữ liệu', show_alert: true });
+            return bot.answerCallbackQuery(query.id, {
+                text: '❌ Bạn không có quyền reset dữ liệu',
+                show_alert: true
+            });
         }
 
         links = [];
         saveLinks(links);
         bot.answerCallbackQuery(query.id, { text: '✅ Dữ liệu đã được reset' });
-        bot.sendMessage(chatId, '🗑 Dữ liệu đã được làm mới thủ công!', { message_thread_id: ALLOWED_TOPIC_ID });
+        sendTempMessage(chatId, '🗑 Dữ liệu đã được làm mới thủ công!', { message_thread_id: ALLOWED_TOPIC_ID });
     }
 });
 
