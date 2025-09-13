@@ -101,28 +101,52 @@ bot.onText(/^\/list$/, (msg) => {
     }
 
     let message = '📌 Danh sách link đã lưu:\n\n';
+    const keyboard = [];
+
     links.forEach((item, index) => {
         message += `${index + 1}. ${item.content} (by ${item.user} - ${item.time})\n`;
+
+        // Nếu là admin hoặc chủ link thì mới hiện nút Xóa
+        if (msg.from.id === ADMIN_ID || item.user === (msg.from.username || msg.from.first_name)) {
+            keyboard.push([{ text: `🗑 Xóa #${index + 1}`, callback_data: `delete_${index}` }]);
+        }
     });
 
-    if (msg.from.id === ADMIN_ID) {
-        const opts = {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '🗑 Reset Data', callback_data: 'reset_data' }]
-                ]
-            },
-            message_thread_id: ALLOWED_TOPIC_ID
-        };
-        bot.sendMessage(chatId, message, opts);
-    } else {
-        bot.sendMessage(chatId, message, { message_thread_id: ALLOWED_TOPIC_ID });
-    }
+    const opts = {
+        reply_markup: { inline_keyboard: keyboard },
+        message_thread_id: ALLOWED_TOPIC_ID
+    };
+
+    bot.sendMessage(chatId, message, opts);
 });
+
 
 // ====== Xử lý nút Reset ======
 bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
+
+    // Xóa link theo index
+    if (query.data.startsWith('delete_')) {
+        const index = parseInt(query.data.split('_')[1], 10);
+
+        if (isNaN(index) || index < 0 || index >= links.length) {
+            return bot.answerCallbackQuery(query.id, { text: '⚠️ Link không tồn tại', show_alert: true });
+        }
+
+        const link = links[index];
+
+        // Chỉ admin hoặc chủ link mới được xóa
+        if (query.from.id !== ADMIN_ID && link.user !== (query.from.username || query.from.first_name)) {
+            return bot.answerCallbackQuery(query.id, { text: '❌ Bạn không có quyền xóa link này', show_alert: true });
+        }
+
+        links.splice(index, 1);
+        saveLinks(links);
+
+        bot.answerCallbackQuery(query.id, { text: '🗑 Link đã được xóa' });
+        sendTempMessage(chatId, `🗑 Đã xóa link: ${link.content}`, { message_thread_id: ALLOWED_TOPIC_ID });
+        return;
+    }
 
     if (query.data === 'reset_data') {
         if (query.from.id !== ADMIN_ID) {
