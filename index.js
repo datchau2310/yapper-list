@@ -69,6 +69,7 @@ bot.onText(/^\/link (.+)/, async (msg, match) => {
 });
 
 // ====== Lệnh /list ======
+// Lệnh /list
 bot.onText(/^\/list$/, (msg) => {
     if (!isAllowedTopic(msg)) return;
 
@@ -83,17 +84,23 @@ bot.onText(/^\/list$/, (msg) => {
         message += `${index + 1}. ${item.content} (by ${item.user} - ${item.time})\n`;
     });
 
-    const opts = {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '🗑 Reset Data', callback_data: 'reset_data' }]
-            ]
-        },
-        message_thread_id: ALLOWED_TOPIC_ID
-    };
-
-    bot.sendMessage(chatId, message, opts);
+    // Nếu là admin → gửi kèm nút reset
+    if (msg.from.id === ADMIN_ID) {
+        const opts = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🗑 Reset Data', callback_data: 'reset_data' }]
+                ]
+            },
+            message_thread_id: ALLOWED_TOPIC_ID
+        };
+        bot.sendMessage(chatId, message, opts);
+    } else {
+        // Người thường → chỉ gửi danh sách
+        bot.sendMessage(chatId, message, { message_thread_id: ALLOWED_TOPIC_ID });
+    }
 });
+
 
 // ====== Xử lý nút Reset ======
 bot.on('callback_query', (query) => {
