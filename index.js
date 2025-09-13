@@ -163,6 +163,52 @@ bot.on('callback_query', (query) => {
     }
 });
 
+async function updatePinnedList(chatId, userId) {
+    if (links.length === 0) return;
+
+    // Gom nhóm theo người gửi
+    const grouped = {};
+    links.forEach((item, index) => {
+        const username = item.user || 'Không rõ';
+        if (!grouped[username]) grouped[username] = [];
+        grouped[username].push({ ...item, index });
+    });
+
+    let message = '📌 Danh sách link đã lưu:\n\n';
+    const keyboard = [];
+
+    for (const [user, items] of Object.entries(grouped)) {
+        message += `👤 ${user}\n`;
+        items.forEach((item) => {
+            message += `• ${item.content} (${item.time})\n`;
+
+            // Chỉ admin hoặc chủ link mới có nút xóa
+            if (userId === ADMIN_ID || item.user === (userId === ADMIN_ID ? 'admin' : (bot.getMe().username || '')) || item.user === (bot.getMe().username || '')) {
+                keyboard.push([{ text: `🗑 Xóa #${item.index + 1}`, callback_data: `delete_${item.index}` }]);
+            }
+        });
+        message += '\n';
+    }
+
+    try {
+        const oldPinId = loadPinnedMessageId();
+        if (oldPinId) {
+            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch(() => { });
+        }
+
+        const sent = await bot.sendMessage(chatId, message.trim(), {
+            reply_markup: { inline_keyboard: keyboard },
+            message_thread_id: ALLOWED_TOPIC_ID
+        });
+
+        await bot.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
+        savePinnedMessageId(sent.message_id);
+    } catch (err) {
+        console.error('Lỗi cập nhật pin:', err.message);
+    }
+}
+
+
 // ====== Cron job reset 7h sáng ======
 cron.schedule('0 0 7 * * *', () => {
     links = [];
