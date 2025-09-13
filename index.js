@@ -12,11 +12,6 @@ const ALLOWED_DOMAIN = "https://x.com"; // Chỉ cho phép link này
 // ====== Khởi tạo bot ======
 const bot = new TelegramBot(token, { polling: true });
 const dataFile = path.join(__dirname, 'links.json');
-bot.deleteWebhook().then(() => {
-    console.log('✅ Webhook đã được xoá, bot sẽ dùng polling.');
-}).catch((err) => {
-    console.error('❌ Lỗi khi xoá webhook:', err.message);
-});
 
 
 // ====== Hàm đọc file ======
