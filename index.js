@@ -99,7 +99,9 @@ async function updatePinnedList(chatId) {
     try {
         const oldPinId = loadPinnedMessageId();
         if (oldPinId) {
-            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch(() => { });
+            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch((err) => {
+                console.error('❌ Không thể xoá pin cũ:', err.message);
+            });
         }
 
         const sent = await bot.sendMessage(chatId, message.trim(), {
@@ -109,10 +111,12 @@ async function updatePinnedList(chatId) {
 
         await bot.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
         savePinnedMessageId(sent.message_id);
+        console.log('📌 Đã ghim tin nhắn mới:', sent.message_id);
     } catch (err) {
-        console.error('Lỗi cập nhật pin:', err.message);
+        console.error('❌ Lỗi khi cập nhật pin:', err.message);
     }
 }
+
 
 
 // ====== Lệnh /link ======
