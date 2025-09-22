@@ -12,9 +12,8 @@ const ALLOWED_DOMAIN = "https://x.com";
 // ====== Khởi tạo bot ======
 const bot = new TelegramBot(token, { polling: true });
 const dataFile = path.join(__dirname, 'links.json');
-const pinFile = path.join(__dirname, 'pin.json');
 
-// ====== Hàm đọc file ======
+// ====== Hàm đọc & ghi file ======
 function loadLinks() {
     try {
         if (fs.existsSync(dataFile)) {
@@ -29,33 +28,11 @@ function loadLinks() {
     }
 }
 
-function loadPinnedMessageId() {
-    try {
-        if (fs.existsSync(pinFile)) {
-            const raw = fs.readFileSync(pinFile, 'utf8');
-            if (!raw || raw.trim() === '') return null;
-            return JSON.parse(raw);
-        }
-        return null;
-    } catch (err) {
-        console.error('Lỗi đọc file pin:', err);
-        return null;
-    }
-}
-
 function saveLinks(data) {
     try {
         fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
     } catch (err) {
         console.error('Lỗi ghi file:', err);
-    }
-}
-
-function savePinnedMessageId(id) {
-    try {
-        fs.writeFileSync(pinFile, JSON.stringify(id));
-    } catch (err) {
-        console.error('Lỗi ghi file pin:', err);
     }
 }
 
@@ -97,12 +74,9 @@ async function updatePinnedList(chatId) {
     }
 
     try {
-        const oldPinId = loadPinnedMessageId();
-        if (oldPinId) {
-            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch((err) => {
-                console.error('❌ Không thể xoá pin cũ:', err.message);
-            });
-        }
+        await bot.unpinAllChatMessages(chatId, { message_thread_id: ALLOWED_TOPIC_ID }).catch((err) => {
+            console.error('❌ Không thể xoá pin cũ:', err.message);
+        });
 
         const sent = await bot.sendMessage(chatId, message.trim(), {
             parse_mode: 'Markdown',
@@ -110,14 +84,11 @@ async function updatePinnedList(chatId) {
         });
 
         await bot.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
-        savePinnedMessageId(sent.message_id);
         console.log('📌 Đã ghim tin nhắn mới:', sent.message_id);
     } catch (err) {
         console.error('❌ Lỗi khi cập nhật pin:', err.message);
     }
 }
-
-
 
 // ====== Lệnh /link ======
 bot.onText(/^\/link (.+)/, async (msg, match) => {
@@ -187,7 +158,6 @@ bot.onText(/^\/list$/, (msg) => {
     });
 });
 
-
 // ====== Lệnh /remove ======
 bot.onText(/^\/remove (\d+)$/, (msg, match) => {
     if (!isAllowedTopic(msg)) return;
@@ -208,26 +178,6 @@ bot.onText(/^\/remove (\d+)$/, (msg, match) => {
     saveLinks(links);
     sendTempMessage(chatId, `🗑 Đã xóa link: ${link.content}`, { message_thread_id: ALLOWED_TOPIC_ID });
     updatePinnedList(chatId);
-});
-
-// ====== Xử lý nút Reset ======
-bot.on('callback_query', (query) => {
-    const chatId = query.message.chat.id;
-
-    if (query.data === 'reset_data') {
-        if (query.from.id !== ADMIN_ID) {
-            return bot.answerCallbackQuery(query.id, {
-                text: '❌ Bạn không có quyền reset dữ liệu',
-                show_alert: true
-            });
-        }
-
-        links = [];
-        saveLinks(links);
-        bot.answerCallbackQuery(query.id, { text: '✅ Dữ liệu đã được reset' });
-        sendTempMessage(chatId, '🗑 Dữ liệu đã được làm mới thủ công!', { message_thread_id: ALLOWED_TOPIC_ID });
-        updatePinnedList(chatId);
-    }
 });
 
 // ====== Cron job reset 7h sáng ======
