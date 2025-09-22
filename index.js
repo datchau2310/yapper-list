@@ -99,8 +99,8 @@ async function updatePinnedList(chatId) {
     try {
         const oldPinId = loadPinnedMessageId();
         if (oldPinId) {
-            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch((err) => {
-                console.error('❌ Không thể xoá pin cũ:', err.message);
+            await bot.deleteMessage(chatId, oldPinId).catch((err) => {
+                console.error('❌ Không thể xoá tin nhắn cũ:', err.message);
             });
         }
 
