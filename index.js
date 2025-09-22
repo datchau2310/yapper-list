@@ -12,6 +12,7 @@ const ALLOWED_DOMAIN = "https://x.com";
 // ====== Khởi tạo bot ======
 const bot = new TelegramBot(token, { polling: true });
 const dataFile = path.join(__dirname, 'links.json');
+const pinFile = path.join(__dirname, 'pin.json');
 
 // ====== Hàm đọc & ghi file ======
 function loadLinks() {
@@ -33,6 +34,28 @@ function saveLinks(data) {
         fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
     } catch (err) {
         console.error('Lỗi ghi file:', err);
+    }
+}
+
+function loadPinnedMessageId() {
+    try {
+        if (fs.existsSync(pinFile)) {
+            const raw = fs.readFileSync(pinFile, 'utf8');
+            if (!raw || raw.trim() === '') return null;
+            return JSON.parse(raw);
+        }
+        return null;
+    } catch (err) {
+        console.error('Lỗi đọc file pin:', err);
+        return null;
+    }
+}
+
+function savePinnedMessageId(id) {
+    try {
+        fs.writeFileSync(pinFile, JSON.stringify(id));
+    } catch (err) {
+        console.error('Lỗi ghi file pin:', err);
     }
 }
 
@@ -74,9 +97,12 @@ async function updatePinnedList(chatId) {
     }
 
     try {
-        await bot.unpinAllChatMessages(chatId, { message_thread_id: ALLOWED_TOPIC_ID }).catch((err) => {
-            console.error('❌ Không thể xoá pin cũ:', err.message);
-        });
+        const oldPinId = loadPinnedMessageId();
+        if (oldPinId) {
+            await bot.unpinChatMessage(chatId, { message_id: oldPinId }).catch((err) => {
+                console.error('❌ Không thể xoá pin cũ:', err.message);
+            });
+        }
 
         const sent = await bot.sendMessage(chatId, message.trim(), {
             parse_mode: 'Markdown',
@@ -84,6 +110,7 @@ async function updatePinnedList(chatId) {
         });
 
         await bot.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
+        savePinnedMessageId(sent.message_id);
         console.log('📌 Đã ghim tin nhắn mới:', sent.message_id);
     } catch (err) {
         console.error('❌ Lỗi khi cập nhật pin:', err.message);
